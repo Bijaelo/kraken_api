@@ -6,47 +6,20 @@
 
 .BasePublicUrl <- 'https://api.kraken.com/0/public/'
 
-workingPairs <- c('USDTCHF', 'BCHUSDT', 'DAIUSDT', 'USDCUSDT', 'XETCXETH', 'XMLNXETH', 'XREPXETH', 'XETCXXBT', 'XETHXXBT', 'XLTCXXBT', 'XMLNXXBT', 'XREPXXBT', 'XXDGXXBT', 'XXLMXXBT', 'XXMRXXBT', 'XXRPXXBT', 'XZECXXBT', 'XETHZCAD', 'XXBTZCAD', 'XXRPZCAD', 'ZUSDZCAD', 'XETCZEUR', 'XETHZEUR', 'XLTCZEUR', 'XMLNZEUR', 'XREPZEUR', 'XXBTZEUR', 'XXLMZEUR', 'XXMRZEUR', 'XXRPZEUR', 'XZECZEUR', 'XETHZGBP', 'XXBTZGBP', 'XETHZJPY', 'XXBTZJPY', 'XXRPZJPY', 'ZUSDZJPY', 'USDTZUSD', 'XETCZUSD', 'XETHZUSD', 'XLTCZUSD', 'XMLNZUSD', 'XREPZUSD', 'XXBTZUSD', 'XXLMZUSD', 'XXMRZUSD', 'XXRPZUSD', 'XZECZUSD', 'ZEURZUSD', 'ZGBPZUSD')
-
-#' Perform GET call and pre-format output from the kraken API
+#' Main function for sending posts to the kraken api
 #' 
-#' @description This function provides the simple functionality used for every GET calls for this package.  
-#' Performs some basic error checking and error messaging.
-#' 
-#' @param call the public api to call, excluding kraken_api:::.BasePublicUrl
-#' @param ... other parameters passed to httr::GET
-#' 
-#' @return the httr::content of the result.
-#' 
-#' @seealso \code{\link{.ServerPost}}
-.ServerGet <- function(call, ...){
-  res <- httr::GET(paste0(.BasePublicUrl, call), ...)
-  cont <- httr::content(res)
-  #Todo: Create a proper error handling module, instead of this simplified error message
-  if(!identical(list(), cont$error))
-    stop(paste0('Unexpected error returned from server call:\n', cont$error[[1]]))
-  cont$result
+#' @seealso \code{.PublicPost}
+.PublicGet <- function(call, ...){
+  .ServerGet(call, .BasePublicUrl, ...)
 }
 
-#' Perform POST call and pre-format output from the kraken API
+#' Main function for sending GET to the kraken api
 #' 
-#' @description This function provides the simple functionality used for every POST calls for this package.  
-#' Performs some basic error checking and error messaging.
-#' 
-#' @param call the public api to call, excluding kraken_api:::.BasePublicUrl
-#' @param ... other parameters passed to httr::POST
-#' 
-#' @return the httr::content of the result.
-#' 
-#' @seealso \code{\link{.ServerGet}}
-.ServerPost <- function(call, ...){
-  res <- httr::POST(paste0(.BasePublicUrl, call), ...)
-  cont <- httr::content(res)
-  #Todo: Create a proper error handling module, instead of this simplified error message
-  if(!identical(list(), cont$error))
-    stop(paste0('Unexpected error returned from server call:\n', cont$error[[1]]))
-  cont$result
+#' @seelalso \code{.PublicPost}
+.PublicPost <- function(call, ...){
+  .ServerPost(call, .BasePublicUrl, ...)
 }
+
 
 #' Get server time
 #' 
@@ -64,7 +37,7 @@ workingPairs <- c('USDTCHF', 'BCHUSDT', 'DAIUSDT', 'USDCUSDT', 'XETCXETH', 'XMLN
 #' @export
 getServerTime <- function(){
   st <- Sys.time()
-  tt <- system.time(res <- .ServerPost('Time'))
+  tt <- system.time(res <- .PublicPost('Time'))
   res[[2]] <- NULL
   res$posixTime <- as.POSIXct(res$unixtime, origin = '1970-01-01 00:00:00:000000000')
   #It seems the time difference is usually less than 1 second
@@ -99,22 +72,7 @@ getAssetInfo <- function(info = NULL,
                          asset = NULL){
   if(!is.null(asset))
     asset <- paste0(asset, collapse = ',')
-  .prettifyDataFrameResult(.ServerPost('Assets', body = list(info = info, aclass = aclass, asset = asset)))
-}
-
-#' Convert list of (possibly named) rows into a data.table
-#' 
-#' @param list a list similar to .ServerPost('Time')
-#' 
-#' @return A data.table object with the rows given by list. Missing values are filled with NA
-.prettifyDataFrameResult <- function(list, nm){
-  if(!is.null(list)){
-    if(missing(nm))
-      nm <- names(list)
-    if(is.null(nm))
-      return(NULL)
-    data.table::setDT(tidyr::unnest_wider(tibble::tibble(list), c(list)))[, rownames := nm][]
-  }
+  .prettifyDataFrameResult(.PublicPost('Assets', body = list(info = info, aclass = aclass, asset = asset)))
 }
 
 #' Get tradable asset pairs
@@ -167,7 +125,7 @@ getTradableAssetPairs <- function(info = 'info', pair = NULL){
   info <- switch(info, info = , all = NULL, info)
   if(!is.null(pair))
     pair <- paste0(pair, collapse = ',')
-  res <- .ServerPost('AssetPairs', body = list(info = info, pair = pair))
+  res <- .PublicPost('AssetPairs', body = list(info = info, pair = pair))
   nm <- names(res)
   if(is.null(nm))
     return(NULL)
@@ -198,14 +156,14 @@ getTradableAssetPairs <- function(info = 'info', pair = NULL){
 #' 
 #' @return if reformat = TRUE a data.table with column specification
 #' \itemize{
-#' \item ask: kapi_list with fields price, whole lot volume and lot volume of current ask prices
+#' \item ask: list with fields price, whole lot volume and lot volume of current ask prices
 #' \item bid: similar to ask field, but with bid prices
-#' \item volume: kapi_list with fields today and last 24 hour, specifying the trade volume of trading pair
-#' \item price: kapi_list same the same fields as volume, but for price
-#' \item trade count: kapi_list same the same fields as volume, but for price
-#' \item low: kapi_list same the same fields as volume, but for price
-#' \item high: kapi_list same the same fields as volume, but for price
-#' \item close: kapi_list with fields price and lot volume.
+#' \item volume: list with fields today and last 24 hour, specifying the trade volume of trading pair
+#' \item price: list same the same fields as volume, but for price
+#' \item trade count: list same the same fields as volume, but for price
+#' \item low: list same the same fields as volume, but for price
+#' \item high: list same the same fields as volume, but for price
+#' \item close: list with fields price and lot volume.
 #' }
 #' otherwise a nested list with naming according to the kraken websocket api. Reformatting takes a bit of time, so this option is available for when speed is of the essence.
 #' 
@@ -213,13 +171,13 @@ getTradableAssetPairs <- function(info = 'info', pair = NULL){
 #' #Get information for all pairs.
 #' getTickerInformation()
 #' #Get information for all ADA pairs (as of 2020-06-01)
-#' getTickerInformation(c('ADAETH', 'ADAEUR', 'ADAUSD', 'ADAXBT'))
-#' #same but without reformatting
-#' (res <- getTickerInformation(c('ADAETH', 'ADAEUR', 'ADAUSD', 'ADAXBT'), reformat = FALSE))[]
-#' #Explode a kapi_list column result. rownames are used for grouping
-#' unnest_dt(res, dt, rownames)
+#' (res <- getTickerInformation(c('ADAETH', 'ADAEUR', 'ADAUSD', 'ADAXBT')))
+#' #Explode a kapi_llist column result. rownames are used for grouping
+#' unnest_dt(res, ask, rownames)
 #' #subsetting the column itself will print something similar (without rownames)
 #' res$ask
+#' #same but without reformatting (faster)
+#' (res <- getTickerInformation(c('ADAETH', 'ADAEUR', 'ADAUSD', 'ADAXBT'), reformat = FALSE))[]
 #' 
 #' @note Fields for today fields start at 00:00:00 UTC
 getTickerInformation <- function(pair, reformat = TRUE){
@@ -227,35 +185,13 @@ getTickerInformation <- function(pair, reformat = TRUE){
     pair <- getTradableAssetPairs()[,rownames]
   if(!is.null(pair))
     pair <- paste0(pair, collapse = ',')
-  res <- .ServerPost('Ticker', body = list(pair = pair))
+  res <- .PublicPost('Ticker', body = list(pair = pair))
   if(!reformat)
     return(res)
   res <- lapply(res, .renameTradingInfoPairElements)
   res <- data.table::setattr(.prettifyDataFrameResult(res), 'class', c('nested_kapi_data.table', 'data.table', 'data.frame'))
   .reformatListColumns(res)[]
 }
-#' Reclass list columns of ticker information into a more informative class
-#' 
-#' @param dt a data.table with ticker information
-#' 
-#' @return the same data.table (invisibly) but with list columns changed to kapi_llist
-.reformatListColumns <- function(dt){
-  lc <- dt[, sapply(.SD, is.list)]
-  nm <- names(lc)
-  for(z in nm[lc]){
-    data.table::setattr(dt[[z]], 'class', c('kapi_llist', 'list'))
-  }
-  dt
-}
-#' utility function for printing kapi_llist columns
-#' 
-#' @param x a kapi_llist object
-#' @param ... further arguments passed along to data.table:::print.data.table
-#' 
-#' @return the printed kapi_llist as a data.table (invisibly)
-print.kapi_llist <- function(x, ...)
-  data.table:::print.data.table(data.table::rbindlist(x, fill = TRUE), ...)
-
 
 #' Utility function for renaming elements of ticker information.
 #' 
@@ -271,63 +207,60 @@ print.kapi_llist <- function(x, ...)
   for(i in c('ask', 'bid'))
     if(!is.null(x[[i]])){
       names(x[[i]]) <-  fields
-      data.table::setattr(x[[i]], 'class', c('kapi_list', 'list'))
     }
   fields <- c('today', 'last 24 hour')
   for(i in c('volume', 'price', 'trade count', 'low', 'high'))
     if(!is.null(x[[i]])){
       names(x[[i]]) <-  fields
-      data.table::setattr(x[[i]], 'class', c('kapi_list', 'list'))
     }
   if(!is.null(x[['close']])){
     names(x[[i]]) <-  c('price', 'lot volume')
-    data.table::setattr(x[[i]], 'class', c('kapi_list', 'list'))
   }
   x
 }
 
-#' Helper function for unnesting list-like columns in data.table.
-#'
-#' @param dt a data.table
-#' @param col column to explode
-#' @param possible grouping column
-#' 
-#' @return a new data.table with columns specified by exploding the lists in col. 
-#' 
-#' @description Code was repurposed from the code described in \href{https://www.google.com/url?sa=t&rct=j&q=&esrc=s&source=web&cd=&ved=2ahUKEwj92Oi_lOHpAhX9AxAIHc4RD3gQFjACegQIAhAB&url=https%3A%2F%2Fosf.io%2Ff6pxw%2Fdownload&usg=AOvVaw1YxmRWJ2O3Wfg_kkuHFyIm}{List-columns in data.table: Nesting and unnesting data1 tables and vectors}.
-#' 
-#' @export
-unnest_dt <- function(dt, col, by){ 
-  stopifnot(data.table::is.data.table(dt))
-  if(missing(by)){
-    by <- substitute(seq_len(nrow(dt)))
-  }else
-    by <- substitute(list(by)) 
-  col <- substitute(unlist(col, recursive = FALSE))
-  dt[, eval(col), by = eval(by)]
-}
-
-
 #' Get OHLC data
 #' 
 #' @description 
+#' This function can be used to import trade information for specific data (Open High Low Close prices) as well as volumes and trade counts.
+#' Similar to other functions in the package this function fails for invalid trading pairs.
 #' 
-#' @param pair 
-#' @param interval 
-#' @param since 
+#' @param pair Asset pair to import data from 
+#' @param interval The time interval between trades to import in minutes. 
+#' @param since From which point should data be imported (in UNIXtime)
 #' 
 #' @return a list with fields
 #' \itemize{
-#' pair: named pair field
-#' last: the unixtime (id) to be used as since for querying new data. 
-#'       As of now it does not seem that data is stored past 660 or so  
+#' \item pair: contains a data.table with columnes \itemize{
+#'  \item time
+#'  \item open
+#'  \item high
+#'  \item low
+#'  \item close 
+#'  \item vwap 
+#'  \item volume
+#'  \item count
+#'  \item Ticker (pair)
 #' }
+#' \item last: the unixtime (id) to be used as since for querying new data. Only a limited time frame is supported (roughly 1.5 days).  
+#' }
+#' 
+#' @examples
+#' pairs <- getTradableAssetPairs()
+#' getOHLCdata(pairs[,rownames[1]])
+#' library(foreach)
+#' out <- foreach(pair = pairs[, rownames], .combine = c, .multicombine = TRUE, .errorhandling = 'pass') %do% {
+#'    Sys.sleep(3)
+#'    getOHLCdata(pair)
+#' }
+#' 
+#' @export
 getOHLCdata <- function(pair, interval = 1, since = NULL){
   if(missing(pair) || is.null(pair) || !is.character(pair))
     stop('Pair must be specified.')
   if(length(pair) > 1)
     return(lapply(pair, getOHLCdata, since = since, interval = interval))
-  res <- .ServerPost('OHLC', body = list(pair = pair))
+  res <- .PublicPost('OHLC', body = list(pair = pair))
   if(!is.numeric(interval))
     stop('interval must be numeric.')
   interval <- as.numeric(as.character(cut(interval, 
@@ -335,7 +268,7 @@ getOHLCdata <- function(pair, interval = 1, since = NULL){
                                           right = FALSE, 
                                           include.lowest = TRUE, 
                                           labels = c(1, 5, 15, 30, 60, 240, 1440, 10080, 21600))))
-  res <- .ServerPost('OHLC', body = list(pair = pair, interval = interval))
+  res <- .PublicPost('OHLC', body = list(pair = pair, interval = interval))
   res[[1]] <- data.table::rbindlist(res[[1]], use.names = FALSE)
   data.table::setnames(res[[1]], c('time', 'open', 'high', 'low', 'close', 'vwap', 'volume', 'count'))
   res
@@ -343,14 +276,26 @@ getOHLCdata <- function(pair, interval = 1, since = NULL){
 
 #' Get order book
 #' 
-#' @param pair 
-#' @param count 
+#' @param pair Asset pair to import data from 
+#' @param count Maximum number of bids/asks 
 #' 
-#' @return 
+#' @description Provides functionality to import current trade book 
 #' 
-#' @description 
+#' @return Returns a list of length 2 (ask / bid) each containing a data.table with elements 
+#' \itemize{
+#' \item price 
+#' \item volume 
+#' \item timestamp
+#' }
 #' 
-#' @examples 
+#' @examples
+#' pairs <- getTradableAssetPairs()
+#' getOrderBook(pairs[,rownames[1]])
+#' library(foreach)
+#' out <- foreach(pair = pairs[, rownames], .combine = c, .multicombine = TRUE, .errorhandling = 'pass') %do% {
+#'    Sys.sleep(3)
+#'    getOrderBook(pair)
+#' } 
 #' 
 #' @export 
 getOrderBook <- function(pair, count = NULL){
@@ -358,43 +303,43 @@ getOrderBook <- function(pair, count = NULL){
     stop('Pair must be specified.')
   if(length(pair) > 1)
     return(lapply(pair, getOrderBook, count = count))
-  res <- .ServerPost('Depth', body = list(pair = pair, count = count))
+  res <- .PublicPost('Depth', body = list(pair = pair, count = count))
+  res <- list(ask = data.table::rbindlist(res[[1]]$asks), 
+              bid = data.table::rbindlist(res[[1]]$bids))
+  data.table::setnames(res[[1]], c('price', 'volume', 'timestamp'))
+  data.table::setnames(res[[2]], c('price', 'volume', 'timestamp'))
   res
 }
 
 
 #' Get recent trades
 #' 
-#' @param pair
-#' @param since
+#' @param pair Asset pair to import data from 
+#' @param since From which point should data be imported (in UNIXtime)
 #' 
-#' @return 
+#' @return A list of length 2 with elements 
+#' \itemize{
+#' \item Pairname: A data.table with columns \itemize{
+#' \item 'price'
+#' \item 'volume'
+#' \item 'time'
+#' \item 'buy_sell'
+#' \item 'market_limit'
+#' \item 'miscellaneous' (mostly blank)
+#' }
+#' \item last: The time to be used next to get "latest" recent trades.
+#' }
 #' 
-#' @description 
+#' @description This function allows one to import information about the latest trades performed. Note that every 'buy' will have an equivalent 'sell'.
 #' 
-#' @examples 
-#' 
-#' @export
-getRecentTrades <- function(pair, since = NULL){
-  if(missing(pair) || is.null(pair) || !is.character(pair))
-    stop('Pair must be specified.')
-  if(!is.numeric(since))
-    since <- as.numeric(since)
-  if(length(pair) > 1)
-    return(lapply(pair, getOrderBook, since = since))
-  res <- .ServerPost('Trades', body = list(pair = pair, since = since))
-  res
-}
-#' Get recent spread
-#' 
-#' @param pair
-#' @param since
-#' 
-#' @return 
-#' 
-#' @description 
-#' 
-#' @examples 
+#' @examples
+#' pairs <- getTradableAssetPairs()
+#' getRecentTrades(pairs[,rownames[1]])
+#' library(foreach)
+#' out <- foreach(pair = pairs[, rownames], .combine = list, .multicombine = TRUE, .errorhandling = 'pass') %do% {
+#'    Sys.sleep(3)
+#'    getRecentTrades(pair)
+#' } 
 #' 
 #' @export
 getRecentTrades <- function(pair, since = NULL){
@@ -404,64 +349,51 @@ getRecentTrades <- function(pair, since = NULL){
     since <- as.numeric(since)
   if(length(pair) > 1)
     return(lapply(pair, getOrderBook, since = since))
-  res <- .ServerPost('Spread', body = list(pair = pair, since = since))
+  res <- .PublicPost('Trades', body = list(pair = pair, since = since))
+  res[[1]] <- data.table::rbindlist(res[[1]], use.names = FALSE)
+  data.table::setnames(res[[1]], c('price', 'volume', 'time', 'buy_sell', 'market_limit', 'miscellaneous'))
   res
 }
-
-#' Get recent trades
+#' Get recent spread data
 #' 
-#' @param pair
-#' @param since
+#' @param pair Asset pair to import data from 
+#' @param since From which point should data be imported (in UNIXtime)
 #' 
-#' @return 
+#' @return A list of length 2 with elements 
 #' 
-#' @description 
+#' \itemize{
+#' \item Pairname: A data.table with columns \itemize{
+#' \item 'time'
+#' \item 'ask'
+#' \item 'bid'
+#' }
+#' \item last: The time to be used next to get "latest" recent trades.
+#' }
+#'  
+#' @description This function lets one extract spread in prices for selected asset pairs. Note that at any given time there may be multiple spreads, and that this function (unlike other functions) seem to have a 200 row limit. (As small as 20 minute time frame)
 #' 
 #' @examples 
+#' pairs <- getTradableAssetPairs()
+#' getRecentSpreadData(pairs[,rownames[1]])
+#' library(foreach)
+#' out <- foreach(pair = pairs[, rownames], .combine = list, .multicombine = TRUE, .errorhandling = 'pass') %do% {
+#'    Sys.sleep(3)
+#'    getRecentSpreadData(pair)
+#' } 
 #' 
 #' @export
-getRecentTrades <- function(pair, since = NULL){
+getRecentSpreadData <- function(pair, since = NULL){
   if(missing(pair) || is.null(pair) || !is.character(pair))
     stop('Pair must be specified.')
   if(!is.numeric(since))
     since <- as.numeric(since)
   if(length(pair) > 1)
     return(lapply(pair, getOrderBook, since = since))
-  res <- .ServerPost('Trades', body = list(pair = pair, since = since))
+  res <- .PublicPost('Spread', body = list(pair = pair, since = since))
+  res[[1]] <- data.table::rbindlist(res[[1]], use.names = FALSE)
+  data.table::setnames(res[[1]], c('time', 'bid', 'ask'))
   res
 }
 
-works <- pairInfo[-which(pairInfo %in% names(out))]
 
-pairInfo <- getAssetInfo()
-pairInfo <- outer(pairInfo$rownames, pairInfo$rownames, paste0)
-pairInfo <- as.vector(pairInfo)
-out <- vector('list', n <- length(pairInfo))
-names(out) <- pairInfo
-pairInfo <- pairInfo[sapply(out, is.null)]
-for(i in seq_len(n)){
-  if(pairInfo[i] %in% works)
-    next
-  d <- tryCatch(getOHLCdata(pairInfo[i]), error = function(e) NULL)
-  if(!is.null(d))
-    out[[i]] <- d
-}
-out[sapply(out, is.null)] <- NULL
-names(out)
-#' function used to export ohlc list to parquet files
-#' 
-#' meant for internal use only
-exportOHLClist <- function(list, path = 'git_repos/kraken_api/OHLC/'){
-  nm <- names(list)
-  for(i in seq_along(list)){
-    if(!is.null(list[[i]])){
-      if(!data.table::is.data.table(list[[i]][[1]]))
-        browser()
-      data.table::set(list[[i]][[1]], j = 'Ticker', value = rep(nm[i], nrow(list[[i]][[1]])))
-      arrow::write_parquet(list[[i]][[1]], paste0(path, nm[i], '_', format(Sys.Date(), '%Y_%m_%d'), '.parquet'))
-    }
-  }
-}
-exportOHLClist(out)
 
-## Update functions to use "workingPairs", which should be updated regularly.
